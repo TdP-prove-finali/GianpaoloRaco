@@ -10,7 +10,6 @@ class View(ft.UserControl):
         self._page.horizontal_alignment = 'CENTER'
         self._page.theme_mode = ft.ThemeMode.LIGHT
         self._page.scroll = ft.ScrollMode.AUTO
-        # controller (it is not initialized. Must be initialized in the main, after the controller is created)
         self._controller = None
 
         # ---------------- Tab 1: Analisi Rosa ----------------
@@ -31,8 +30,10 @@ class View(ft.UserControl):
 
         # ---------------- Tab 3: Giocatori Sottovalutati ----------------
         self.dd_ruolo_sottovalutati = None
+        self.dd_sotto_ruolo_sottovalutati = None
         self.tf_prezzo_min = None
         self.tf_prezzo_max = None
+        self.dd_ordina_sottovalutati = None
         self.btn_cerca_sottovalutati = None
         self.txt_sottovalutati_result = None
 
@@ -44,8 +45,9 @@ class View(ft.UserControl):
         self.txt_sostituti_result = None
 
         # ---------------- Tab 5: Piano di Mercato ----------------
-        self.dd_club_piano = None
+
         self.tf_max_acquisti = None
+        self.dd_ruolo_colpo_mercato = None
         self.btn_genera_piano = None
         self.btn_confronta_scenari = None
         self.txt_piano_result = None
@@ -70,7 +72,8 @@ class View(ft.UserControl):
         self._page.update()
 
     def _build_tab_analisi_rosa(self):
-        self.dd_club = ft.Dropdown(label="Club", width=300)
+        self.dd_club = ft.Dropdown(
+            label="Club", width=300, on_change=self._controller.handleClubChange)
         self._controller.fillDDClub(self.dd_club)
         self.btn_analizza_rosa = ft.ElevatedButton(
             text="Analizza Rosa", on_click=self._controller.handleAnalizzaRosa, width=250)
@@ -113,11 +116,29 @@ class View(ft.UserControl):
         return ft.Tab(text="Obiettivi Campagna", content=content)
 
     def _build_tab_sottovalutati(self):
-        self.dd_ruolo_sottovalutati = ft.Dropdown(label="Ruolo", width=250)
+        self.dd_ruolo_sottovalutati = ft.Dropdown(
+            label="Ruolo", width=250, on_change=self._controller.handleRuoloChange)
         self._controller.fillDDRuolo(self.dd_ruolo_sottovalutati)
+
+
+        self.dd_sotto_ruolo_sottovalutati = ft.Dropdown(label="Sotto-ruolo", width=250)
+        self._controller.fillDDSottoRuolo(self.dd_sotto_ruolo_sottovalutati)
 
         self.tf_prezzo_min = ft.TextField(label="Prezzo minimo (€)", width=180, keyboard_type=ft.KeyboardType.NUMBER)
         self.tf_prezzo_max = ft.TextField(label="Prezzo massimo (€)", width=180, keyboard_type=ft.KeyboardType.NUMBER)
+
+
+        self.dd_ordina_sottovalutati = ft.Dropdown(
+            label="Ordina per",
+            width=250,
+            value="rapporto",
+            options=[
+                ft.dropdown.Option(key="rapporto", text="Rapporto per milione di euro"),
+                ft.dropdown.Option(key="indice", text="Indice di rendimento (z-score)"),
+                ft.dropdown.Option(key="valore", text="Valore di mercato"),
+                ft.dropdown.Option(key="contratto", text="Anni di contratto residuo"),
+            ],
+        )
 
         self.btn_cerca_sottovalutati = ft.ElevatedButton(
             text="Cerca Sottovalutati", on_click=self._controller.handleCercaSottovalutati, width=250)
@@ -125,8 +146,10 @@ class View(ft.UserControl):
         self.txt_sottovalutati_result = ft.ListView(expand=1, spacing=10, padding=20, auto_scroll=True, height=350)
 
         content = ft.Column([
-            ft.Row([self.dd_ruolo_sottovalutati, self.tf_prezzo_min, self.tf_prezzo_max],
+            ft.Row([self.dd_ruolo_sottovalutati, self.dd_sotto_ruolo_sottovalutati,
+                    self.tf_prezzo_min, self.tf_prezzo_max],
                    alignment=ft.MainAxisAlignment.CENTER),
+            ft.Row([self.dd_ordina_sottovalutati], alignment=ft.MainAxisAlignment.CENTER),
             ft.Row([self.btn_cerca_sottovalutati], alignment=ft.MainAxisAlignment.CENTER),
             self.txt_sottovalutati_result,
         ])
@@ -159,11 +182,12 @@ class View(ft.UserControl):
         return ft.Tab(text="Sostituti Simili", content=content)
 
     def _build_tab_piano_mercato(self):
-        self.dd_club_piano = ft.Dropdown(label="Club", width=300)
-        self._controller.fillDDClub(self.dd_club_piano)
-
         self.tf_max_acquisti = ft.TextField(
             label="Numero massimo acquisti", width=220, keyboard_type=ft.KeyboardType.NUMBER)
+
+
+        self.dd_ruolo_colpo_mercato = ft.Dropdown(label="Ruolo del colpo di mercato", width=250)
+        self._controller.fillDDRuolo(self.dd_ruolo_colpo_mercato)
 
         self.btn_genera_piano = ft.ElevatedButton(
             text="Genera Piano Ottimale", on_click=self._controller.handleGeneraPiano, width=250)
@@ -173,11 +197,78 @@ class View(ft.UserControl):
         self.txt_piano_result = ft.ListView(expand=1, spacing=10, padding=20, auto_scroll=True, height=350)
 
         content = ft.Column([
-            ft.Row([self.dd_club_piano, self.tf_max_acquisti], alignment=ft.MainAxisAlignment.CENTER),
+            ft.Row([self.tf_max_acquisti], alignment=ft.MainAxisAlignment.CENTER),
+            ft.Row([self.dd_ruolo_colpo_mercato], alignment=ft.MainAxisAlignment.CENTER),
             ft.Row([self.btn_genera_piano, self.btn_confronta_scenari], alignment=ft.MainAxisAlignment.CENTER),
             self.txt_piano_result,
         ])
         return ft.Tab(text="Piano di Mercato", content=content)
+
+    def mostra_analisi_rosa(self, report):
+
+        self.txt_analisi_rosa.controls.clear()
+        for riga in str(report).split("\n"):
+            self.txt_analisi_rosa.controls.append(ft.Text(riga))
+        self._page.update()
+
+
+    _NOTA_INDICE_RENDIMENTO = (
+        "L'indice di rendimento indica quanto un giocatore ha reso, nell'ultima stagione, "
+        "rispetto ad altri giocatori dello stesso ruolo (più alto = ha reso meglio dei suoi "
+        "pari ruolo). Il rapporto per milione indica la convenienza rispetto al prezzo: più "
+        "alto = più rendimento per ogni milione di euro speso."
+    )
+
+    def mostra_sottovalutati(self, risultati):
+
+        self.txt_sottovalutati_result.controls.clear()
+        self.txt_sottovalutati_result.controls.append(
+            ft.Text(self._NOTA_INDICE_RENDIMENTO, italic=True, color="grey", size=12)
+        )
+        for posizione, r in enumerate(risultati, start=1):
+            self.txt_sottovalutati_result.controls.append(ft.Text(f"{posizione}. {r}"))
+        self._page.update()
+
+    def mostra_sostituti(self, risultati):
+
+        self.txt_sostituti_result.controls.clear()
+        self.txt_sostituti_result.controls.append(ft.Text(
+            "La similarità indica quanto un giocatore somiglia, nelle statistiche, a quello "
+            "da sostituire (1 = quasi identico). " + self._NOTA_INDICE_RENDIMENTO,
+            italic=True, color="grey", size=12,
+        ))
+        for posizione, r in enumerate(risultati, start=1):
+            self.txt_sostituti_result.controls.append(ft.Text(f"{posizione}. {r}"))
+        self._page.update()
+
+    def mostra_piano_mercato(self, piano):
+
+        self.txt_piano_result.controls.clear()
+        self.txt_piano_result.controls.append(
+            ft.Text(self._NOTA_INDICE_RENDIMENTO, italic=True, color="grey", size=12)
+        )
+        for riga in str(piano).split("\n"):
+            self.txt_piano_result.controls.append(ft.Text(riga))
+        self._page.update()
+
+    def mostra_confronto_scenari(self, risultato):
+
+        self.txt_piano_result.controls.clear()
+        self.txt_piano_result.controls.append(ft.Text(
+            "\"Rendimento\" = somma di quanto ogni giocatore scelto ha reso, nell'ultima "
+            "stagione, rispetto ad altri giocatori dello stesso ruolo: più alto = squadra "
+            "che, sulla carta, rende meglio. Le simulazioni sotto stimano quanto ci si può "
+            "fidare di questo numero, dato che le statistiche passate non garantiscono lo "
+            "stesso rendimento la prossima stagione.",
+            italic=True, color="grey", size=12,
+        ))
+        for riga in str(risultato).split("\n"):
+
+            e_intestazione = riga.strip() != "" and riga == riga.upper() and any(c.isalpha() for c in riga)
+            self.txt_piano_result.controls.append(
+                ft.Text(riga, weight=ft.FontWeight.BOLD if e_intestazione else None)
+            )
+        self._page.update()
 
     def _handle_soglia_similarita_change(self, e):
         self.txt_soglia_similarita_value.value = f"{float(e.control.value):.2f}"
