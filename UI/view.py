@@ -285,8 +285,10 @@ class View(ft.UserControl):
     def set_controller(self, controller):
         self._controller = controller
 
-    def create_alert(self, message):
-        dlg = ft.AlertDialog(title=ft.Text(message))
+    def create_alert(self, message, color=None):
+        dlg = ft.AlertDialog(
+            title=ft.Text(message, color=color)
+        )
         self._page.dialog = dlg
         dlg.open = True
         self._page.update()
